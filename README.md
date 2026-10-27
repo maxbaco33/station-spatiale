@@ -6,11 +6,13 @@ Base orbitale de création de **Célestin** et **Maxence** : un endroit où l'on
 
 Tout est expliqué dans `index.html` : c'est la bible de la Station. Elle s'impose à tous les projets, à Célestin, à Maxence et à Claude. Elle ne change que si les deux le décident ensemble.
 
-> ⚠️ Sur GitHub, cliquer sur `index.html` montre seulement son code : GitHub n'affiche pas les pages web.
+### 👉 [Ouvrir la bible en ligne](https://maxbaco33.github.io/station-spatiale/)
 
-**Pour la lire :**
-1. Récupère le dépôt sur ton ordinateur (voir « Rejoindre la Station » plus bas), ou mets-le à jour avec `git pull`.
-2. Dans le dossier `station-spatiale`, **double-clique sur `index.html`** : la page s'ouvre dans ton navigateur.
+La page est publiée automatiquement par GitHub Pages à chaque mise à jour de `main` (compter une minute).
+
+> Sur GitHub, cliquer sur le fichier `index.html` montre seulement son code ; c'est le lien ci-dessus qui affiche la page.
+
+Hors ligne : dans le dossier `station-spatiale` récupéré sur ton ordinateur, **double-clique sur `index.html`**.
 
 Il faut Internet pour la scène 3D (vaisseau, Terre, étoiles) ; sans connexion, le texte reste lisible.
 
