@@ -1,0 +1,761 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Station Spatiale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void: #03040a;
+    --text: #e8ecff;
+    --muted: #9aa3c7;
+    --dim: #5d6690;
+    --glass: rgba(10, 13, 30, .66);
+    --glass-line: rgba(140, 160, 255, .18);
+    --celestin: #5fd4e6;
+    --maxence: #ff8a3d;
+    --ensemble: #a78bfa;
+    --hud: #6ef2b0;
+    --warn: #ffd166;
+    --title: "Orbitron", "Segoe UI", system-ui, sans-serif;
+    --body: "Space Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--void); color: var(--text);
+    font: 17px/1.65 var(--body); overflow-x: hidden;
+  }
+  ::selection { background: var(--ensemble); color: #0b0820; }
+  a { color: inherit; }
+
+  /* --- Scène 3D (fond fixe) --------------------------------------------------------------- */
+  #space { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; display: block; opacity: 0; transition: opacity 1.8s ease; }
+  #space.ready { opacity: 1; }
+  /* Sans WebGL : un ciel dessiné en CSS, la page reste belle et lisible. */
+  .no-webgl body {
+    background:
+      radial-gradient(1px 1px at 12% 18%, #fff, transparent), radial-gradient(1px 1px at 72% 34%, #fff, transparent),
+      radial-gradient(1px 1px at 38% 66%, #cfe0ff, transparent), radial-gradient(1px 1px at 86% 82%, #fff, transparent),
+      radial-gradient(45% 40% at 20% 25%, rgba(122, 80, 255, .18), transparent 70%),
+      radial-gradient(40% 35% at 85% 75%, rgba(40, 190, 220, .12), transparent 70%), var(--void);
+    background-attachment: fixed;
+  }
+  .page { position: relative; z-index: 1; }
+
+  /* --- Barre HUD -------------------------------------------------------------------------- */
+  .hud-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    display: flex; align-items: center; gap: 18px; padding: 10px 20px;
+    background: linear-gradient(to bottom, rgba(3, 4, 10, .92), rgba(3, 4, 10, .5));
+    border-bottom: 1px solid var(--glass-line); backdrop-filter: blur(8px);
+    font: 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+  }
+  .hud-bar .brand { font: 700 13px/1 var(--title); color: var(--text); letter-spacing: .18em; text-decoration: none; white-space: nowrap; }
+  .hud-bar nav { display: flex; gap: 16px; margin-left: auto; overflow-x: auto; scrollbar-width: none; }
+  .hud-bar nav::-webkit-scrollbar { display: none; }
+  .hud-bar nav a { text-decoration: none; white-space: nowrap; padding: 4px 0; border-bottom: 1px solid transparent; transition: color .2s, border-color .2s; }
+  .hud-bar nav a:hover { color: var(--text); border-color: var(--hud); }
+  .live { display: inline-flex; align-items: center; gap: 8px; color: var(--hud); white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--hud); box-shadow: 0 0 10px var(--hud); animation: blink 1.6s infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  @media (max-width: 760px) { .hud-bar .live { display: none; } .hud-bar nav { gap: 12px; } }
+
+  /* --- Ouverture -------------------------------------------------------------------------- */
+  .hero {
+    position: relative; min-height: 100vh; min-height: 100svh; display: grid; align-items: center;
+    padding: 96px max(20px, calc((100vw - 1240px) / 2)) 64px max(12px, calc((100vw - 1480px) / 2));
+  }
+  .hero-inner { position: relative; max-width: 640px; }
+  /* Léger voile derrière le texte : lisible quelle que soit la position de la station. */
+  .hero-inner::before {
+    content: ""; position: absolute; inset: -60px -80px -60px -120px; z-index: -1; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(3, 4, 10, .55), transparent);
+  }
+  .kicker { font: 600 12px/1 var(--mono); letter-spacing: .28em; text-transform: uppercase; color: var(--hud); margin: 0 0 18px; }
+  h1 {
+    font: 900 clamp(2rem, 4.5vw, 4rem)/.95 var(--title); margin: 0; letter-spacing: .02em;
+    background: linear-gradient(180deg, #ffffff 0%, #c9d2ff 55%, #8c97d6 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 0 30px rgba(167, 139, 250, .25));
+  }
+  .lead { font-size: clamp(1.05rem, 2.4vw, 1.3rem); color: #c3cae8; max-width: 46ch; margin: 22px 0 0; text-shadow: 0 1px 12px rgba(0, 0, 0, .8); }
+  .telemetry { display: flex; flex-wrap: wrap; gap: 10px; margin: 30px 0 0; }
+  .chip {
+    font: 12px/1 var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--glass-line); background: rgba(8, 11, 26, .7); border-radius: 999px; padding: 9px 14px; backdrop-filter: blur(6px);
+  }
+  .chip b { color: var(--text); font-weight: 600; }
+  .chip b.ok { color: var(--hud); }
+  .scroll-cue { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); font: 11px/1 var(--mono); letter-spacing: .3em; color: var(--muted); text-transform: uppercase; animation: cue 2.4s ease-in-out infinite; white-space: nowrap; }
+  @keyframes cue { 50% { transform: translate(-50%, 6px); opacity: .5; } }
+  /* Téléphone : texte en haut, la station occupe le bas de l'écran. */
+  @media (max-aspect-ratio: 9/10) { .hero { align-items: start; padding-top: 110px; } }
+
+  /* --- Sections ---------------------------------------------------------------------------- */
+  section { max-width: 1080px; margin: 0 auto; padding: 72px 20px 8px; scroll-margin-top: 60px; }
+  .module-tag { font: 600 12px/1 var(--mono); letter-spacing: .24em; text-transform: uppercase; color: var(--hud); margin: 0 0 10px; }
+  h2 { font: 700 clamp(1.6rem, 4vw, 2.4rem)/1.1 var(--title); margin: 0 0 22px; letter-spacing: .03em; text-shadow: 0 2px 20px rgba(0, 0, 0, .8); }
+  h3 { font: 600 1.1rem/1.3 var(--body); margin: 0 0 6px; }
+  p { max-width: 70ch; }
+  code { font: .9em var(--mono); background: rgba(167, 139, 250, .14); color: #d8ccff; border-radius: 6px; padding: 1px 6px; }
+
+  .panel {
+    position: relative; background: var(--glass); border: 1px solid var(--glass-line); border-radius: 18px;
+    padding: 22px 24px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  /* Coins de visée façon interface de bord */
+  .panel::before, .panel::after {
+    content: ""; position: absolute; width: 16px; height: 16px; border: 2px solid var(--hud); opacity: .7; pointer-events: none;
+  }
+  .panel::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; border-top-left-radius: 18px; }
+  .panel::after { bottom: -1px; right: -1px; border-left: 0; border-top: 0; border-bottom-right-radius: 18px; }
+
+  .directive { border-color: rgba(167, 139, 250, .45); box-shadow: 0 0 60px rgba(167, 139, 250, .12) inset; }
+  .directive .seal { font: 700 1.05rem/1.3 var(--title); letter-spacing: .08em; color: #d8ccff; margin-bottom: 10px; }
+  .directive p { margin: 0; color: #cfd5f5; }
+  .directive p + p { margin-top: 10px; }
+
+  .crew { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 680px) { .crew { grid-template-columns: 1fr; } }
+  .astro { display: flex; gap: 18px; align-items: center; }
+  .badge { flex: none; width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; font: 900 1.7rem/1 var(--title); position: relative; }
+  .badge::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 1px dashed currentColor; opacity: .55; animation: spin 18s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .badge.c { color: var(--celestin); background: radial-gradient(circle, rgba(95, 212, 230, .22), rgba(95, 212, 230, .04)); box-shadow: 0 0 24px rgba(95, 212, 230, .25); }
+  .badge.m { color: var(--maxence); background: radial-gradient(circle, rgba(255, 138, 61, .22), rgba(255, 138, 61, .04)); box-shadow: 0 0 24px rgba(255, 138, 61, .25); }
+  .astro .name { font: 700 1.35rem/1.1 var(--title); letter-spacing: .04em; }
+  .astro .role { font: 12px/1.5 var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-top: 6px; }
+  .c-text { color: var(--celestin); } .m-text { color: var(--maxence); } .e-text { color: var(--ensemble); }
+
+  .mission p { color: #cfd5f5; }
+  .mission p:first-child { margin-top: 0; } .mission p:last-child { margin-bottom: 0; }
+
+  /* Séquence de lancement */
+  .countdown { list-style: none; margin: 0; padding: 0; position: relative; }
+  .countdown::before { content: ""; position: absolute; left: 39px; top: 10px; bottom: 10px; width: 2px; background: linear-gradient(var(--hud), var(--ensemble), var(--maxence)); opacity: .5; }
+  .countdown li { display: grid; grid-template-columns: 80px 1fr; gap: 18px; align-items: start; margin: 0 0 14px; }
+  .t { position: relative; z-index: 1; width: 80px; height: 44px; border-radius: 12px; display: grid; place-items: center; font: 700 15px/1 var(--mono); color: var(--hud); background: #07101c; border: 1px solid rgba(110, 242, 176, .45); box-shadow: 0 0 16px rgba(110, 242, 176, .15); }
+  .countdown li:last-child .t { color: #160b02; background: var(--maxence); border-color: var(--maxence); box-shadow: 0 0 22px rgba(255, 138, 61, .5); }
+  .countdown .panel { padding: 16px 20px; }
+  .countdown .panel p { margin: 0; color: var(--muted); }
+  @media (max-width: 520px) { .countdown li { grid-template-columns: 62px 1fr; gap: 12px; } .t { width: 62px; } .countdown::before { left: 30px; } }
+
+  /* Règlement */
+  .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+  .rule .num { font: 600 11px/1 var(--mono); letter-spacing: .2em; color: var(--dim); margin-bottom: 10px; }
+  .rule p { margin: 0; color: var(--muted); }
+
+  /* Plan */
+  .blueprint {
+    font: 14px/1.75 var(--mono); color: #bfe9ff; margin: 0; overflow-x: auto; white-space: pre;
+    background:
+      linear-gradient(rgba(95, 212, 230, .06) 1px, transparent 1px) 0 0 / 22px 22px,
+      linear-gradient(90deg, rgba(95, 212, 230, .06) 1px, transparent 1px) 0 0 / 22px 22px,
+      rgba(6, 20, 38, .78);
+    border: 1px solid rgba(95, 212, 230, .3);
+  }
+  .blueprint .note { color: var(--dim); }
+
+  /* Registre */
+  table { width: 100%; border-collapse: collapse; font-size: .97rem; }
+  th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--glass-line); vertical-align: top; }
+  th { font: 600 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+  .status { display: inline-flex; align-items: center; gap: 8px; font: 12px/1 var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--warn); white-space: nowrap; }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; animation: blink 2s infinite; }
+  .table-wrap { overflow-x: auto; }
+
+  footer { max-width: 1080px; margin: 80px auto 0; padding: 28px 20px 48px; border-top: 1px solid var(--glass-line); display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; font: 12px/1.6 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  footer b { color: var(--muted); font-weight: 600; }
+
+  /* Sans JavaScript, tout reste visible : seule la classe .anim (posée par le script) masque avant l'apparition. */
+  .anim .reveal { opacity: 0; transform: translateY(24px); transition: opacity .8s ease, transform .8s ease; }
+  .anim .reveal.on { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .anim .reveal { opacity: 1; transform: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="space" aria-hidden="true"></canvas>
+
+<header class="hud-bar">
+  <a class="brand" href="#top">◈ STATION SPATIALE</a>
+  <span class="live"><span class="dot"></span> en orbite · <span id="clock">--:--:--</span> UTC</span>
+  <nav aria-label="Modules de la station">
+    <a href="#directive">Directive</a>
+    <a href="#equipage">Équipage</a>
+    <a href="#mission">Mission</a>
+    <a href="#lancement">Lancement</a>
+    <a href="#reglement">Règlement</a>
+    <a href="#plan">Plan</a>
+    <a href="#registre">Registre</a>
+  </nav>
+</header>
+
+<div class="page" id="top">
+
+  <!-- ===================== OUVERTURE ===================== -->
+  <div class="hero">
+    <div class="hero-inner">
+      <p class="kicker">Base orbitale de création · Célestin &amp; Maxence</p>
+      <h1>LA STATION<br>SPATIALE</h1>
+      <p class="lead">Une station en orbite, encore vide, exprès. On y crée des projets à deux, à partir de rien, juste pour le plaisir d'inventer et de construire ensemble.</p>
+      <div class="telemetry">
+        <span class="chip">Statut <b class="ok">en orbite</b></span>
+        <span class="chip">Équipage <b>2</b></span>
+        <span class="chip">Missions <b>0</b></span>
+        <span class="chip">Jours en orbite <b id="days">J+0</b></span>
+      </div>
+    </div>
+    <div class="scroll-cue">▼ entrer dans la station</div>
+  </div>
+
+  <!-- ===================== DIRECTIVE ===================== -->
+  <section id="directive">
+    <p class="module-tag">Module 00 · Directive principale</p>
+    <div class="panel directive reveal">
+      <div class="seal">📜 CETTE PAGE EST LA BIBLE DE LA STATION</div>
+      <p>Tout ce qui est écrit ici s'impose à tous les projets : à <span class="c-text">Célestin</span>, à <span class="m-text">Maxence</span>, et à <span class="e-text">Claude</span> quand il travaille pour nous.</p>
+      <p>En cas de doute, c'est cette page qui fait foi. Elle ne change que si Célestin et Maxence le décident ensemble.</p>
+    </div>
+  </section>
+
+  <!-- ===================== ÉQUIPAGE ===================== -->
+  <section id="equipage">
+    <p class="module-tag">Module 01 · Équipage</p>
+    <h2>Deux pilotes</h2>
+    <div class="crew">
+      <div class="panel astro reveal">
+        <div class="badge c">C</div>
+        <div>
+          <div class="name c-text">Célestin</div>
+          <div class="role">Idées · code · tests · avis honnête</div>
+        </div>
+      </div>
+      <div class="panel astro reveal">
+        <div class="badge m">M</div>
+        <div>
+          <div class="name m-text">Maxence</div>
+          <div class="role">Idées · code · tests · avis honnête</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== MISSION ===================== -->
+  <section id="mission">
+    <p class="module-tag">Module 02 · La mission</p>
+    <h2>Le principe</h2>
+    <div class="panel mission reveal">
+      <p>Pas de client, pas de délai, pas d'obligation. Une idée nous plaît ? On la construit. Elle ne mène nulle part ? Ce n'est pas grave, on a appris quelque chose. Chaque projet démarre <strong>vierge</strong> : une page blanche, un dossier, et l'envie de voir ce que ça donne.</p>
+      <p>On est deux à égalité. Personne n'est le chef, chacun peut proposer, coder, tester et dire franchement ce qu'il en pense. On s'aide d'outils comme <strong>Claude Code</strong> pour aller vite, mais les idées et les choix restent les nôtres.</p>
+    </div>
+  </section>
+
+  <!-- ===================== LANCEMENT ===================== -->
+  <section id="lancement">
+    <p class="module-tag">Module 03 · Séquence de lancement</p>
+    <h2>Comment on fonctionne</h2>
+    <ol class="countdown">
+      <li class="reveal"><div class="t">T-4</div><div class="panel"><h3>Une idée</h3><p>N'importe lequel de nous deux la propose, en une phrase. On l'ajoute à la boîte à idées.</p></div></li>
+      <li class="reveal"><div class="t">T-3</div><div class="panel"><h3>Un dossier vierge</h3><p>Si on se lance, on crée un dossier dans <code>projets/</code>, avec un petit <code>README.md</code> : ce que c'est, pour qui, ce qu'on veut voir marcher en premier.</p></div></li>
+      <li class="reveal"><div class="t">T-2</div><div class="panel"><h3>Un dépôt partagé</h3><p>Tout vit dans un dépôt GitHub privé dont on est tous les deux collaborateurs. Chacun peut y travailler quand il veut, de chez lui.</p></div></li>
+      <li class="reveal"><div class="t">T-1</div><div class="panel"><h3>Chacun sa branche</h3><p>On travaille chacun sur une branche à son nom (<code>celestin/…</code>, <code>maxence/…</code>). Comme ça, personne ne casse le travail de l'autre.</p></div></li>
+      <li class="reveal"><div class="t">T-0</div><div class="panel"><h3>On montre, on fusionne</h3><p>Quand quelque chose marche, on le montre à l'autre. Si on est d'accord tous les deux, on le fusionne dans <code>main</code>. Décollage.</p></div></li>
+    </ol>
+  </section>
+
+  <!-- ===================== RÈGLEMENT ===================== -->
+  <section id="reglement">
+    <p class="module-tag">Module 04 · Règlement de bord</p>
+    <h2>Les règles d'or</h2>
+    <div class="rules">
+      <div class="panel rule reveal"><div class="num">RÈGLE 01</div><h3>Pas de pression</h3><p>Chacun avance à son rythme. Un projet peut dormir des semaines et repartir.</p></div>
+      <div class="panel rule reveal"><div class="num">RÈGLE 02</div><h3>On ne casse rien chez l'autre</h3><p>Branches séparées, et on ne fusionne dans <code>main</code> qu'à deux.</p></div>
+      <div class="panel rule reveal"><div class="num">RÈGLE 03</div><h3>Aucun secret dans le code</h3><p>Jamais de mot de passe, de clé ou de jeton dans les fichiers. Ils vont dans les secrets GitHub.</p></div>
+      <div class="panel rule reveal"><div class="num">RÈGLE 04</div><h3>On écrit ce qu'on fait</h3><p>Un README par projet, tenu à jour. Celui qui revient dans trois mois doit comprendre.</p></div>
+      <div class="panel rule reveal"><div class="num">RÈGLE 05</div><h3>Pour nous</h3><p>Ce qu'on crée ici est pour notre usage et nos proches, pas pour le revendre… pour l'instant ;)</p></div>
+      <div class="panel rule reveal"><div class="num">RÈGLE 06</div><h3>Le droit d'arrêter</h3><p>Abandonner une idée qui ne plaît plus, c'est permis. On garde le dossier, on passe à autre chose.</p></div>
+    </div>
+  </section>
+
+  <!-- ===================== PLAN ===================== -->
+  <section id="plan">
+    <p class="module-tag">Module 05 · Plan de la station</p>
+    <h2>Organisation</h2>
+<pre class="panel blueprint reveal">Station-Spatiale/
+├── index.html          <span class="note">← cette page : la bible</span>
+├── CLAUDE.md           <span class="note">← dit à Claude de suivre la bible</span>
+├── idees.md            <span class="note">← la boîte à idées (une ligne par idée)</span>
+└── projets/
+    └── nom-du-projet/
+        ├── README.md   <span class="note">← ce que c'est, comment le lancer</span>
+        └── …           <span class="note">← le code</span></pre>
+  </section>
+
+  <!-- ===================== REGISTRE ===================== -->
+  <section id="registre">
+    <p class="module-tag">Module 06 · Registre des missions</p>
+    <h2>Nos projets</h2>
+    <div class="panel reveal table-wrap">
+      <table>
+        <tr><th>Mission</th><th>Ce que c'est</th><th>Équipage</th><th>État</th></tr>
+        <tr>
+          <td><em>le prochain…</em></td>
+          <td>À inventer ensemble.</td>
+          <td><span class="e-text">les deux</span></td>
+          <td><span class="status">page blanche</span></td>
+        </tr>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    <span><b>La Station Spatiale</b> · <span class="c-text">Célestin</span> &amp; <span class="m-text">Maxence</span></span>
+    <span>En orbite depuis octobre 2026</span>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// =====================================================================================================
+// Scène 3D : Voie lactée, étoiles, Terre, et un petit chasseur spatial (ailes en X aux couleurs de C et M,
+// réacteurs, feux). Toutes les textures sont générées ici, sans aucune image à télécharger.
+// =====================================================================================================
+(() => {
+  const canvas = document.getElementById('space');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let renderer;
+  try {
+    if (!window.THREE) throw new Error('three.js absent');
+    renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  } catch (e) {
+    document.documentElement.classList.add('no-webgl');
+    canvas.remove();
+    return;
+  }
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.75));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 2000);
+  camera.position.set(0, 0, 9);
+
+  const rand = (() => { let s = 20261027; return () => (s = Math.imul(s ^ (s >>> 15), 2246822519) + 1 >>> 0) / 4294967296; })();
+
+  function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+  function texture(c, srgb = true, repeat = false) {
+    const t = new THREE.CanvasTexture(c);
+    if (srgb) t.encoding = THREE.sRGBEncoding;
+    t.anisotropy = maxAniso;
+    if (repeat) t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    return t;
+  }
+  function glowTexture(inner, outer) {
+    const c = makeCanvas(128, 128), g = c.getContext('2d');
+    const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    grd.addColorStop(0, inner); grd.addColorStop(.25, outer); grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+    return texture(c);
+  }
+  function glow(tex, scale, opacity = 1) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity }));
+    s.scale.setScalar(scale);
+    return s;
+  }
+
+  // --- Lumières --------------------------------------------------------------------------------------
+  const sunDir = new THREE.Vector3(-6, 3.5, 5).normalize();
+  const sun = new THREE.DirectionalLight(0xfff1e0, 2.8);
+  sun.position.copy(sunDir).multiplyScalar(20);
+  scene.add(sun);
+  const rim = new THREE.DirectionalLight(0x6f9dff, .55);
+  rim.position.set(6, -1, -6);
+  scene.add(rim);
+  scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x16110c, .22));
+  const fill = new THREE.DirectionalLight(0xdfe6ff, .9);
+  fill.position.set(2, 2, 9);
+  scene.add(fill);
+
+  // --- Étoiles (points scintillants) ------------------------------------------------------------------
+  const starCount = 6000;
+  const pos = new Float32Array(starCount * 3), col = new Float32Array(starCount * 3), size = new Float32Array(starCount), phase = new Float32Array(starCount);
+  for (let i = 0; i < starCount; i++) {
+    const u = rand() * 2 - 1, th = rand() * Math.PI * 2, r = 300 + rand() * 300, s = Math.sqrt(1 - u * u);
+    pos.set([s * Math.cos(th) * r, u * r, s * Math.sin(th) * r], i * 3);
+    const tint = rand();
+    const c = tint < .1 ? [1, .82, .66] : tint < .22 ? [.72, .82, 1] : [1, 1, 1];
+    col.set(c, i * 3);
+    size[i] = Math.pow(rand(), 3.5) * 3.2 + .6;
+    phase[i] = rand() * 100;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  starGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  starGeo.setAttribute('size', new THREE.BufferAttribute(size, 1));
+  starGeo.setAttribute('phase', new THREE.BufferAttribute(phase, 1));
+  const starMat = new THREE.ShaderMaterial({
+    uniforms: { time: { value: 0 }, pr: { value: renderer.getPixelRatio() } },
+    vertexShader: `
+      attribute float size; attribute float phase; attribute vec3 color;
+      uniform float time; uniform float pr; varying vec3 vColor; varying float vTw;
+      void main() {
+        vColor = color;
+        vTw = .65 + .35 * sin(time * (.6 + fract(phase) * 1.8) + phase);
+        vec4 mv = modelViewMatrix * vec4(position, 1.);
+        gl_PointSize = size * pr;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      varying vec3 vColor; varying float vTw;
+      void main() {
+        float d = length(gl_PointCoord - .5);
+        float a = smoothstep(.5, .0, d);
+        gl_FragColor = vec4(vColor * vTw, a * a);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  });
+  const stars = new THREE.Points(starGeo, starMat);
+  scene.add(stars);
+
+  // --- Soleil (hors champ, son halo déborde dans le coin) --------------------------------------------
+  const sunGlow = glow(glowTexture('rgba(255,248,235,1)', 'rgba(255,190,120,.35)'), 140, .9);
+  sunGlow.position.copy(sunDir).multiplyScalar(420);
+  scene.add(sunGlow);
+
+  // --- Petit chasseur spatial (inspiré des films de science-fiction, design original) --------------------
+  // Fuselage effilé, cockpit en bulle, petit dôme de droïde, quatre ailes en X qui s'ouvrent à l'arrivée,
+  // canons en bout d'ailes et réacteurs rouge-orangé. Ailes de gauche turquoise (Célestin), de droite orange (Maxence).
+  const ship = new THREE.Group();   // position et cap
+  const craft = new THREE.Group();  // roulis autour de l'axe du nez
+  ship.add(craft);
+  scene.add(ship);
+
+  // Revêtement patiné : panneaux, rivets et traînées de crasse.
+  const hullCanvas = (() => {
+    const c = makeCanvas(512, 512), g = c.getContext('2d');
+    g.fillStyle = '#d9dad4'; g.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 70; i++) {
+      const shade = 196 + Math.floor(rand() * 40);
+      g.fillStyle = `rgb(${shade},${shade},${shade - 6})`;
+      g.fillRect(Math.floor(rand() * 8) * 64 + 2, Math.floor(rand() * 16) * 32 + 2, 60 + Math.floor(rand() * 2) * 64, 28);
+    }
+    g.strokeStyle = 'rgba(60,62,66,.5)'; g.lineWidth = 1.5;
+    for (let i = 0; i <= 512; i += 64) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 512); g.stroke(); }
+    for (let i = 0; i <= 512; i += 32) { g.beginPath(); g.moveTo(0, i); g.lineTo(512, i); g.stroke(); }
+    for (let i = 0; i < 160; i++) {
+      g.strokeStyle = `rgba(70,60,50,${.04 + rand() * .1})`; g.lineWidth = 1 + rand() * 3;
+      const x = rand() * 512, y = rand() * 512;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rand() - .5) * 8, y + 20 + rand() * 60); g.stroke();
+    }
+    g.fillStyle = 'rgba(50,50,55,.55)';
+    for (let x = 0; x < 512; x += 64) for (let y = 0; y < 512; y += 8) g.fillRect(x + 3, y, 1.5, 1.5);
+    return c;
+  })();
+  const hull = new THREE.MeshStandardMaterial({ color: 0xf0efe9, map: texture(hullCanvas, true, true), metalness: .35, roughness: .55 });
+  const hullDouble = hull.clone(); hullDouble.side = THREE.DoubleSide;
+  const darkMetal = new THREE.MeshStandardMaterial({ color: 0x33363d, metalness: .85, roughness: .38 });
+  const canopyGlass = new THREE.MeshStandardMaterial({ color: 0x101826, metalness: .95, roughness: .08 });
+  const glowMat = color => new THREE.MeshBasicMaterial({ color, toneMapped: false });
+  function add(parent, geo, mat, x = 0, y = 0, z = 0) {
+    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); parent.add(m); return m;
+  }
+  const alongX = g => g.rotateZ(Math.PI / 2);
+
+  // Fuselage : profil de côté extrudé (nez vers +X), légèrement chanfreiné.
+  const side = new THREE.Shape();
+  side.moveTo(-1.62, -.2); side.lineTo(1.1, -.13); side.lineTo(2.25, -.05); side.lineTo(2.32, .01); side.lineTo(1.15, .1);
+  side.lineTo(.25, .24); side.lineTo(-.7, .28); side.lineTo(-1.62, .24); side.lineTo(-1.62, -.2);
+  const fuselageGeo = new THREE.ExtrudeGeometry(side, { depth: .36, bevelEnabled: true, bevelThickness: .05, bevelSize: .04, bevelSegments: 3 });
+  fuselageGeo.translate(0, 0, -.18);
+  add(craft, fuselageGeo, hull);
+  // Cockpit en bulle, avec ses montants.
+  const canopy = add(craft, new THREE.SphereGeometry(.5, 40, 20, 0, Math.PI * 2, 0, Math.PI / 2), canopyGlass, .3, .2, 0);
+  canopy.scale.set(1.05, .46, .36);
+  for (const x of [.05, .45]) add(craft, new THREE.BoxGeometry(.03, .03, .4), darkMetal, x, .38, 0).rotation.z = x > .2 ? -.35 : .25;
+  // Dôme du petit droïde, derrière le cockpit.
+  add(craft, new THREE.SphereGeometry(.13, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), hull, -.45, .29, 0);
+  add(craft, new THREE.CylinderGeometry(.131, .131, .035, 24), glowMat(0x5fd4e6), -.45, .31, 0);
+  add(craft, new THREE.SphereGeometry(.025, 12, 8), glowMat(0x8fc8ff), -.38, .36, .06);
+  // Bloc moteur arrière et petits ailerons.
+  add(craft, new THREE.BoxGeometry(.3, .4, .5), darkMetal, -1.62, .02, 0);
+  add(craft, new THREE.BoxGeometry(.5, .2, .03), hull, -1.35, .36, 0).rotation.z = .3;
+  // Bandes de couleur sur le nez : turquoise côté gauche, orange côté droit.
+  add(craft, new THREE.BoxGeometry(.7, .045, .005), glowMat(0x2fb9cf), 1.35, -.02, .225).material.toneMapped = true;
+  add(craft, new THREE.BoxGeometry(.7, .045, .005), glowMat(0xf07a30), 1.35, -.02, -.225).material.toneMapped = true;
+
+  // Ailes : trapèze extrudé, avec réacteur à l'emplanture et canon au bout.
+  const wingShape = new THREE.Shape();
+  wingShape.moveTo(-1.38, 0); wingShape.lineTo(-.42, 0); wingShape.lineTo(-.72, 1.9); wingShape.lineTo(-1.2, 1.9); wingShape.lineTo(-1.38, 0);
+  const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: .045, bevelEnabled: false });
+  wingGeo.rotateX(Math.PI / 2); wingGeo.translate(0, .022, 0);
+  const exhaustTex = glowTexture('rgba(255,200,170,1)', 'rgba(255,90,60,.5)');
+  const exhausts = [], wings = [];
+  for (const sideZ of [1, -1]) for (const up of [1, -1]) {
+    const pivot = new THREE.Group(); pivot.position.set(0, up * .06, sideZ * .2);
+    const wing = new THREE.Group(); wing.scale.z = sideZ; pivot.add(wing);
+    add(wing, wingGeo, hullDouble);
+    // Bande de l'équipage près du bout de l'aile.
+    add(wing, new THREE.BoxGeometry(.42, .05, .26), new THREE.MeshStandardMaterial({ color: sideZ > 0 ? 0x2fb9cf : 0xf07a30, metalness: .3, roughness: .5 }), -.96, 0, 1.45);
+    // Réacteur
+    add(wing, alongX(new THREE.CylinderGeometry(.15, .15, 1.05, 32)), hull, -.95, up * .1, .3);
+    add(wing, alongX(new THREE.CylinderGeometry(.155, .155, .1, 32)), darkMetal, -.45, up * .1, .3);
+    add(wing, alongX(new THREE.CylinderGeometry(.12, .12, .02, 32)), glowMat(0xff7a5c), -1.48, up * .1, .3);
+    const ex = glow(exhaustTex, .7); ex.position.set(-1.55, up * .1, .3); wing.add(ex); exhausts.push(ex);
+    // Canon en bout d'aile
+    add(wing, alongX(new THREE.CylinderGeometry(.035, .035, 2.3, 12)), darkMetal, -.2, 0, 1.92);
+    add(wing, alongX(new THREE.CylinderGeometry(.055, .055, .32, 12)), hull, .98, 0, 1.92);
+    add(wing, alongX(new THREE.CylinderGeometry(.02, .02, .2, 8)), darkMetal, 1.22, 0, 1.92);
+    craft.add(pivot); wings.push({ pivot, up });
+  }
+
+  // Feux de navigation en bout d'ailes et lueur du cockpit.
+  const lights = [];
+  function beacon(tex, parent, x, y, z, scale, period, phase, strobe) {
+    const s = glow(tex, scale); s.position.set(x, y, z); parent.add(s); lights.push({ s, period, phase, strobe });
+  }
+  const redTex = glowTexture('rgba(255,90,90,1)', 'rgba(255,40,40,.4)');
+  const greenTex = glowTexture('rgba(120,255,180,1)', 'rgba(40,255,140,.35)');
+  const whiteTex = glowTexture('rgba(255,255,255,1)', 'rgba(200,220,255,.4)');
+  beacon(greenTex, wings[0].pivot.children[0], -1.25, .05, 1.92, .35, 2.4, 0, false);
+  beacon(redTex, wings[2].pivot.children[0], -1.25, .05, 1.92, .35, 2.4, .5, false);
+  beacon(whiteTex, craft, -1.78, .25, 0, .45, 1.8, 0, true);
+  const engineLight = new THREE.PointLight(0xff7a5c, 1.4, 4, 2); engineLight.position.set(-1.9, 0, 0); craft.add(engineLight);
+
+  ship.rotation.set(0, -2.5, .06);
+
+  // --- Terre et Voie lactée : textures lourdes, générées après le premier affichage ---------------------
+  const earth = new THREE.Group();
+  const earthBody = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), new THREE.MeshStandardMaterial({ color: 0x2f6fd6, roughness: .8, metalness: 0 }));
+  const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.015, 64, 48), new THREE.MeshStandardMaterial({ color: 0xffffff, transparent: true, opacity: 0, roughness: 1, depthWrite: false }));
+  earth.add(earthBody, clouds);
+  const atmosphere = glow(glowTexture('rgba(130,190,255,.55)', 'rgba(70,140,255,.18)'), 3.4, .8);
+  earth.add(atmosphere);
+  scene.add(earth);
+
+  // --- Ciel et Terre : calculés en arrière-plan (Web Worker) pour que la page reste fluide -----------------
+  // Le même code sert dans le worker et, s'il est indisponible, directement dans la page.
+  const genSrc = `
+    function hash3(x, y, z) {
+      let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177);
+      h = Math.imul(h ^ (h >>> 13), 1103515245);
+      h ^= h >>> 16;
+      return (h >>> 0) / 4294967296;
+    }
+    function noise3(x, y, z) {
+      const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+      const xf = x - xi, yf = y - yi, zf = z - zi;
+      const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf), w = zf * zf * (3 - 2 * zf);
+      const c000 = hash3(xi, yi, zi), c100 = hash3(xi + 1, yi, zi), c010 = hash3(xi, yi + 1, zi), c110 = hash3(xi + 1, yi + 1, zi);
+      const c001 = hash3(xi, yi, zi + 1), c101 = hash3(xi + 1, yi, zi + 1), c011 = hash3(xi, yi + 1, zi + 1), c111 = hash3(xi + 1, yi + 1, zi + 1);
+      const x00 = c000 + (c100 - c000) * u, x10 = c010 + (c110 - c010) * u, x01 = c001 + (c101 - c001) * u, x11 = c011 + (c111 - c011) * u;
+      const y0 = x00 + (x10 - x00) * v, y1 = x01 + (x11 - x01) * v;
+      return y0 + (y1 - y0) * w;
+    }
+    function fbm(x, y, z, octaves) {
+      let amp = .5, freq = 1, sum = 0, norm = 0;
+      for (let i = 0; i < octaves; i++) { sum += amp * noise3(x * freq, y * freq, z * freq); norm += amp; amp *= .5; freq *= 2.03; }
+      return sum / norm;
+    }
+    function smooth(a, b, x) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
+    // Parcourt une texture équirectangulaire en donnant à chaque pixel sa direction sur la sphère.
+    function forSphere(w, h, fn) {
+      for (let j = 0; j < h; j++) {
+        const lat = (.5 - (j + .5) / h) * Math.PI, cl = Math.cos(lat), sl = Math.sin(lat);
+        for (let i = 0; i < w; i++) {
+          const lon = ((i + .5) / w) * Math.PI * 2;
+          fn(cl * Math.cos(lon), sl, cl * Math.sin(lon), lat, (j * w + i) * 4);
+        }
+      }
+    }
+    // Voie lactée discrète (sans nuages de nébuleuse) et poussière d'étoiles.
+    function genSky(w, h) {
+      const d = new Uint8ClampedArray(w * h * 4);
+      const bl = Math.hypot(.35, 1, .25), bx = .35 / bl, by = 1 / bl, bz = .25 / bl;
+      forSphere(w, h, (x, y, z, lat, k) => {
+        const p = x * bx + y * by + z * bz;
+        const band = Math.exp(-p * p / .03);
+        const nz = fbm(x * 3.2 + 1, y * 3.2, z * 3.2, 4);
+        const dust = smooth(.42, .7, fbm(x * 7, y * 7, z * 7 + 4, 3));
+        const lum = band * (.12 + .88 * nz * nz) * (1 - .6 * dust) * .5;
+        let r = 3 + lum * 150, g = 4 + lum * 150, b = 10 + lum * 200;
+        if (hash3(Math.floor(x * 900), Math.floor(y * 900), Math.floor(z * 900)) > .9987) { r += 110; g += 110; b += 120; }
+        d[k] = r; d[k + 1] = g; d[k + 2] = b; d[k + 3] = 255;
+      });
+      return d;
+    }
+    function genEarth(w, h) {
+      const img = new Uint8ClampedArray(w * h * 4), cl = new Uint8ClampedArray(w * h * 4);
+      forSphere(w, h, (x, y, z, lat, k) => {
+        const n = fbm(x * 1.9 + 5, y * 1.9, z * 1.9, 5), land = smooth(.515, .53, n), ice = smooth(1.15, 1.3, Math.abs(lat));
+        const veg = fbm(x * 5, y * 5, z * 5, 3);
+        let r = 10 + n * 30, g = 40 + n * 70, b = 110 + n * 110;
+        const lr = 70 + veg * 90, lg = 95 + veg * 50, lb = 45 + veg * 30;
+        r += (lr - r) * land; g += (lg - g) * land; b += (lb - b) * land;
+        r += (240 - r) * ice; g += (245 - g) * ice; b += (250 - b) * ice;
+        img[k] = r; img[k + 1] = g; img[k + 2] = b; img[k + 3] = 255;
+        const c = smooth(.5, .72, fbm(x * 3 + 11, y * 5.5, z * 3, 5));
+        cl[k] = cl[k + 1] = cl[k + 2] = 255; cl[k + 3] = c * 235;
+      });
+      return [img, cl];
+    }
+    function generateAll() {
+      const sky = genSky(1024, 512);
+      const [earth, clouds] = genEarth(512, 256);
+      return { sky, earth, clouds };
+    }`;
+
+  function generateTextures() {
+    const local = () => new Function(genSrc + '\nreturn generateAll();')();
+    return new Promise(resolve => {
+      try {
+        const url = URL.createObjectURL(new Blob([genSrc + `
+          onmessage = () => { const r = generateAll(); postMessage(r, [r.sky.buffer, r.earth.buffer, r.clouds.buffer]); };`], { type: 'text/javascript' }));
+        const worker = new Worker(url);
+        worker.onmessage = e => { resolve(e.data); worker.terminate(); URL.revokeObjectURL(url); };
+        worker.onerror = () => { worker.terminate(); resolve(local()); };
+        worker.postMessage(0);
+      } catch (e) {
+        resolve(local());
+      }
+    });
+  }
+  function canvasFrom(data, w, h) {
+    const c = makeCanvas(w, h);
+    c.getContext('2d').putImageData(new ImageData(data, w, h), 0, 0);
+    return c;
+  }
+  function applyTextures({ sky, earth: earthData, clouds: cloudData }) {
+    const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(900, 64, 32), new THREE.MeshBasicMaterial({ map: texture(canvasFrom(sky, 1024, 512)), side: THREE.BackSide, depthWrite: false }));
+    skyMesh.renderOrder = -1;
+    scene.add(skyMesh);
+    earthBody.material.map = texture(canvasFrom(earthData, 512, 256)); earthBody.material.color.set(0xffffff); earthBody.material.needsUpdate = true;
+    clouds.material.map = texture(canvasFrom(cloudData, 512, 256)); clouds.material.opacity = 1; clouds.material.needsUpdate = true;
+  }
+
+  // --- Mise en page selon l'écran ----------------------------------------------------------------------
+  const base = { ship: new THREE.Vector3(), shipScale: 1, earth: new THREE.Vector3() };
+  function layout() {
+    const w = innerWidth, h = innerHeight, a = w / h;
+    renderer.setSize(w, h, false);
+    camera.aspect = a; camera.updateProjectionMatrix();
+    if (a < .9) {
+      // Téléphone : le vaisseau sous le texte.
+      base.shipScale = .25; base.ship.set(.3, -1.9, -1); base.earth.set(-2.6, -3.6, -26);
+    } else {
+      // Écran large : le vaisseau dans la moitié droite, d'autant plus petit que l'écran est étroit.
+      const k = Math.min(a, 2.2);
+      base.shipScale = Math.min(.41, Math.max(.24, .22 * k));
+      base.ship.set(1.75 * k, .2, 0); base.earth.set(3.4 * k, 9.6, -40);
+    }
+    ship.scale.setScalar(base.shipScale);
+  }
+  addEventListener('resize', layout);
+  layout();
+
+  let mx = 0, my = 0;
+  addEventListener('pointermove', e => { mx = e.clientX / innerWidth - .5; my = e.clientY / innerHeight - .5; });
+
+  // --- Boucle d'animation ------------------------------------------------------------------------------
+  const clock = new THREE.Clock();
+  let running = true, started = -1;
+  document.addEventListener('visibilitychange', () => { running = !document.hidden; if (running) { clock.getDelta(); requestAnimationFrame(frame); } });
+
+  function frame() {
+    if (!running) return;
+    const t = clock.getElapsedTime();
+    if (started < 0) started = t;
+    const scrollMax = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+    const p = Math.min(1, scrollY / scrollMax);
+
+    // En descendant dans la page, le vaisseau s'éloigne doucement vers le haut.
+    ship.position.set(base.ship.x, base.ship.y + Math.sin(t * .7) * .1 + p * 3.2, base.ship.z - p * 2);
+    // Ailes en X : elles s'ouvrent à l'arrivée (position d'attaque).
+    const open = reduce ? 1 : Math.min(1, (t - started) / 2.4), ease = open * open * (3 - 2 * open);
+    for (const w of wings) w.pivot.rotation.x = w.up * .24 * ease * (w.pivot.position.z > 0 ? -1 : 1);
+    if (!reduce) {
+      ship.rotation.y = -2.5 + Math.sin(t * .12) * .14 + p * .6;
+      ship.rotation.z = .06 + Math.sin(t * .23) * .04;
+      craft.rotation.x = Math.sin(t * .45) * .12;
+      const flicker = .85 + Math.random() * .3;
+      for (const ex of exhausts) ex.scale.setScalar(.7 * flicker);
+      engineLight.intensity = 1.2 * flicker;
+      clouds.rotation.y = t * .02;
+      earthBody.rotation.y = t * .012;
+      stars.rotation.y = t * .004;
+    }
+    earth.position.copy(base.earth);
+
+    for (const l of lights) {
+      const v = Math.sin((t / l.period + l.phase) * Math.PI * 2);
+      l.s.material.opacity = l.strobe ? (v > .92 ? 1 : 0) : .35 + .65 * (v * .5 + .5);
+    }
+    starMat.uniforms.time.value = t;
+
+    // Parallaxe douce avec la souris.
+    camera.position.x += (mx * .6 - camera.position.x) * .04;
+    camera.position.y += (-my * .4 - p * .6 - camera.position.y) * .04;
+    camera.lookAt(0, -p * .8, 0);
+
+    renderer.render(scene, camera);
+    if (!reduce) requestAnimationFrame(frame);
+  }
+
+  // Ouverture : on prépare tout hors écran (textures en arrière-plan, shaders compilés, deux images
+  // rendues), puis la scène apparaît en fondu. Aucune saccade pendant le chargement.
+  generateTextures().then(data => {
+    applyTextures(data);
+    renderer.compile(scene, camera);
+    renderer.render(scene, camera);
+    requestAnimationFrame(() => {
+      frame();
+      requestAnimationFrame(() => canvas.classList.add('ready'));
+    });
+    // Sécurité : si le navigateur ne joue pas le fondu (économie d'énergie…), la scène s'affiche quand même.
+    setTimeout(() => { if (parseFloat(getComputedStyle(canvas).opacity) < .9) { canvas.style.transition = 'none'; canvas.style.opacity = '1'; } }, 2500);
+    if (reduce) { addEventListener('scroll', () => requestAnimationFrame(frame), { passive: true }); addEventListener('resize', () => requestAnimationFrame(frame)); }
+  });
+})();
+
+// Horloge de bord (UTC) et jours passés en orbite depuis la création de la station.
+(() => {
+  const founded = Date.UTC(2026, 9, 27);
+  const clock = document.getElementById('clock');
+  const days = document.getElementById('days');
+  function tick() {
+    const now = new Date();
+    clock.textContent = now.toISOString().slice(11, 19);
+    days.textContent = 'J+' + Math.max(0, Math.floor((now - founded) / 86400000));
+  }
+  tick(); setInterval(tick, 1000);
+})();
+
+// Les panneaux s'allument quand ils arrivent à l'écran (et tous ceux déjà dépassés, en cas de saut par le menu).
+(() => {
+  const items = [...document.querySelectorAll('.reveal')];
+  document.documentElement.classList.add('anim');
+  function check() {
+    const limit = innerHeight * .92;
+    for (const el of items) {
+      if (!el.classList.contains('on') && el.getBoundingClientRect().top < limit) el.classList.add('on');
+    }
+  }
+  addEventListener('scroll', check, { passive: true });
+  addEventListener('resize', check);
+  addEventListener('hashchange', () => setTimeout(check, 50));
+  check();
+})();
+</script>
+</body>
+</html>
